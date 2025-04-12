@@ -41,7 +41,7 @@ CONFIG_WIFI_CREDENTIALS_STATIC=y
 
 ## 🧱 Building and Flashing
 
-Simply use nrf connect the extension on visual code to and build and flash the firmware. It should work with these commands too but not tested it.
+Simply use the nRF Connect extension in Visual Studio Code to build and flash the firmware. The commands should work as well, but I haven’t tested them.
 
 ### 🔨 Build the Firmware
 ```
