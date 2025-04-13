@@ -7,7 +7,7 @@
  #ifndef __MQTT_H__
  #define __MQTT_H__
  
-int tls_init_wrapper(void);
+int add_credentials(void);
 void connect_to_cloud_and_publish(void);
 void abort_mqtt_connection(void);
  

@@ -6,12 +6,18 @@ LOG_MODULE_REGISTER(app_mqtt, LOG_LEVEL_DBG);
 #include <zephyr/random/random.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/socket.h>
+#if IS_ENABLED(CONFIG_BOARD_NRF9160DK)
+#include <modem/modem_key_mgmt.h>
+#include <modem/nrf_modem_lib.h>
+#else
+#include <zephyr/net/tls_credentials.h>
+#endif
+
 #include <string.h>
 #include <errno.h>
 
 #include "config.h"
 #include "test_certs.h"
-
 
 /* Buffers for MQTT client. */
 static uint8_t rx_buffer[APP_MQTT_BUFFER_SIZE];
@@ -47,11 +53,12 @@ static struct mqtt_topic subs_topic;
 static struct mqtt_subscription_list subs_list;
 
 static void mqtt_event_handler(struct mqtt_client *const client,
-			       const struct mqtt_evt *evt);
+							   const struct mqtt_evt *evt);
 
 static void prepare_fds(struct mqtt_client *client)
 {
-	if (client->transport.type == MQTT_TRANSPORT_SECURE) {
+	if (client->transport.type == MQTT_TRANSPORT_SECURE)
+	{
 		fds[0].fd = client->transport.tls.sock;
 	}
 
@@ -68,12 +75,14 @@ static int wait(int timeout)
 {
 	int rc = -EINVAL;
 
-	if (nfds <= 0) {
+	if (nfds <= 0)
+	{
 		return rc;
 	}
 
 	rc = poll(fds, nfds, timeout);
-	if (rc < 0) {
+	if (rc < 0)
+	{
 		LOG_ERR("poll error: %d", errno);
 		return -errno;
 	}
@@ -90,11 +99,10 @@ static void broker_init(void)
 
 #if defined(CONFIG_DNS_RESOLVER)
 	net_ipaddr_copy(&broker4->sin_addr,
-			&net_sin(haddr->ai_addr)->sin_addr);
+					&net_sin(haddr->ai_addr)->sin_addr);
 #else
 	inet_pton(AF_INET, SERVER_ADDR, &broker4->sin_addr);
 #endif
-
 }
 
 static void client_init(struct mqtt_client *client)
@@ -145,14 +153,15 @@ static void client_init(struct mqtt_client *client)
 }
 
 static void mqtt_event_handler(struct mqtt_client *const client,
-			       const struct mqtt_evt *evt)
+							   const struct mqtt_evt *evt)
 {
 	struct mqtt_puback_param puback;
 	uint8_t data[33];
 	int len;
 	int bytes_read;
 
-	switch (evt->type) {
+	switch (evt->type)
+	{
 	case MQTT_EVT_SUBACK:
 		LOG_INF("SUBACK packet id: %u", evt->param.suback.message_id);
 		break;
@@ -162,7 +171,8 @@ static void mqtt_event_handler(struct mqtt_client *const client,
 		break;
 
 	case MQTT_EVT_CONNACK:
-		if (evt->result) {
+		if (evt->result)
+		{
 			LOG_ERR("MQTT connect failed %d", evt->result);
 			break;
 		}
@@ -179,7 +189,8 @@ static void mqtt_event_handler(struct mqtt_client *const client,
 		break;
 
 	case MQTT_EVT_PUBACK:
-		if (evt->result) {
+		if (evt->result)
+		{
 			LOG_ERR("MQTT PUBACK error %d", evt->result);
 			break;
 		}
@@ -192,14 +203,15 @@ static void mqtt_event_handler(struct mqtt_client *const client,
 
 		LOG_INF("MQTT publish received %d, %d bytes", evt->result, len);
 		LOG_INF(" id: %d, qos: %d", evt->param.publish.message_id,
-			evt->param.publish.message.topic.qos);
+				evt->param.publish.message.topic.qos);
 
-		while (len) {
+		while (len)
+		{
 			bytes_read = mqtt_read_publish_payload(&client_ctx,
-					data,
-					len >= sizeof(data) - 1 ?
-					sizeof(data) - 1 : len);
-			if (bytes_read < 0 && bytes_read != -EAGAIN) {
+												   data,
+												   len >= sizeof(data) - 1 ? sizeof(data) - 1 : len);
+			if (bytes_read < 0 && bytes_read != -EAGAIN)
+			{
 				LOG_ERR("failure to read payload");
 				break;
 			}
@@ -231,7 +243,8 @@ static void subscribe(struct mqtt_client *client)
 	subs_list.message_id = 1U;
 
 	err = mqtt_subscribe(client, &subs_list);
-	if (err) {
+	if (err)
+	{
 		LOG_ERR("Failed on topic %s", devbound_topic);
 	}
 }
@@ -259,9 +272,11 @@ static void poll_mqtt(void)
 {
 	int rc;
 
-	while (mqtt_connected) {
+	while (mqtt_connected)
+	{
 		rc = wait(SYS_FOREVER_MS);
-		if (rc > 0) {
+		if (rc > 0)
+		{
 			mqtt_input(&client_ctx);
 		}
 	}
@@ -281,12 +296,14 @@ static void publish_timeout(struct k_work *work)
 {
 	int rc;
 
-	if (!mqtt_connected) {
+	if (!mqtt_connected)
+	{
 		return;
 	}
 
 	rc = publish(&client_ctx, MQTT_QOS_1_AT_LEAST_ONCE);
-	if (rc) {
+	if (rc)
+	{
 		LOG_ERR("mqtt_publish ERROR");
 		goto end;
 	}
@@ -303,11 +320,13 @@ static int try_to_connect(struct mqtt_client *client)
 
 	LOG_DBG("attempting to connect...");
 
-	while (retries--) {
+	while (retries--)
+	{
 		client_init(client);
 
 		rc = mqtt_connect(client);
-		if (rc) {
+		if (rc)
+		{
 			LOG_ERR("mqtt_connect failed %d", rc);
 			continue;
 		}
@@ -315,17 +334,19 @@ static int try_to_connect(struct mqtt_client *client)
 		prepare_fds(client);
 
 		rc = wait(APP_SLEEP_MSECS);
-		if (rc < 0) {
+		if (rc < 0)
+		{
 			mqtt_abort(client);
 			return rc;
 		}
 
 		mqtt_input(client);
 
-		if (mqtt_connected) {
+		if (mqtt_connected)
+		{
 			subscribe(client);
 			k_work_reschedule(&pub_message,
-					  K_SECONDS(timeout_for_publish()));
+							  K_SECONDS(timeout_for_publish()));
 			return 0;
 		}
 
@@ -342,66 +363,79 @@ static int get_mqtt_broker_addrinfo(void)
 	int retries = 3;
 	int rc = -EINVAL;
 
-	while (retries--) {
+	while (retries--)
+	{
 		hints.ai_family = AF_INET;
 		hints.ai_socktype = SOCK_STREAM;
 		hints.ai_protocol = 0;
 
 		rc = getaddrinfo(CONFIG_SAMPLE_CLOUD_AZURE_HOSTNAME, "8883",
-				 &hints, &haddr);
-		if (rc == 0) {
+						 &hints, &haddr);
+		if (rc == 0)
+		{
 			LOG_INF("DNS resolved for %s:%d",
-			CONFIG_SAMPLE_CLOUD_AZURE_HOSTNAME,
-			CONFIG_SAMPLE_CLOUD_AZURE_SERVER_PORT);
+					CONFIG_SAMPLE_CLOUD_AZURE_HOSTNAME,
+					CONFIG_SAMPLE_CLOUD_AZURE_SERVER_PORT);
 
 			return 0;
 		}
 
 		LOG_ERR("DNS not resolved for %s:%d, retrying",
-			CONFIG_SAMPLE_CLOUD_AZURE_HOSTNAME,
-			CONFIG_SAMPLE_CLOUD_AZURE_SERVER_PORT);
+				CONFIG_SAMPLE_CLOUD_AZURE_HOSTNAME,
+				CONFIG_SAMPLE_CLOUD_AZURE_SERVER_PORT);
 	}
 
 	return rc;
 }
 
-static int tls_init(void)
+int add_credentials(void)
 {
-	int err;
+	int err = 0;
 
-	err = tls_credential_add(APP_CA_CERT_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
-				 ca_certificate, sizeof(ca_certificate));
-	if (err < 0) {
-		LOG_ERR("Failed to register public certificate: %d", err);
-		return err;
+	if (IS_ENABLED(CONFIG_BOARD_NRF9160DK))
+	{
+		if (sizeof(ca_certificate) > 1)
+		{
+			err = modem_key_mgmt_write(955,
+									   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
+									   ca_certificate,
+									   sizeof(ca_certificate) - 1);
+			if (err)
+			{
+				return err;
+			}
+		}
+	}
+	else
+	{
+		err = tls_credential_add(APP_CA_CERT_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
+								 ca_certificate, sizeof(ca_certificate));
+		if (err < 0)
+		{
+			LOG_ERR("Failed to register public certificate: %d", err);
+			return err;
+		}
 	}
 
-	return err;
-}
+	k_work_init_delayable(&pub_message, publish_timeout);
 
-int tls_init_wrapper(void)
-{
-    if (tls_init()) {
-        return -1;
-    }
-
-    k_work_init_delayable(&pub_message, publish_timeout);
-
-    return 0;
+	return 0;
 }
 
 void connect_to_cloud_and_publish(void)
 {
 	int rc = -EINVAL;
 
-	while (true) {
-
+	while (true)
+	{
 		rc = get_mqtt_broker_addrinfo();
-		if (rc) {
+		if (rc)
+		{
 			return;
 		}
 		rc = try_to_connect(&client_ctx);
-		if (rc) {
+		if (rc)
+		{
 			return;
 		}
 
@@ -411,7 +445,8 @@ void connect_to_cloud_and_publish(void)
 
 void abort_mqtt_connection(void)
 {
-	if (mqtt_connected) {
+	if (mqtt_connected)
+	{
 		mqtt_connected = false;
 		mqtt_abort(&client_ctx);
 		k_work_cancel_delayable(&pub_message);
