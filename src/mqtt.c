@@ -6,11 +6,11 @@ LOG_MODULE_REGISTER(app_mqtt, LOG_LEVEL_DBG);
 #include <zephyr/random/random.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/socket.h>
-#if IS_ENABLED(CONFIG_BOARD_NRF9160DK)
+#if IS_ENABLED(CONFIG_BOARD_NRF7002DK)
+#include <zephyr/net/tls_credentials.h>
+#else
 #include <modem/modem_key_mgmt.h>
 #include <modem/nrf_modem_lib.h>
-#else
-#include <zephyr/net/tls_credentials.h>
 #endif
 
 #include <string.h>
@@ -392,29 +392,26 @@ int add_credentials(void)
 {
 	int err = 0;
 
-	if (IS_ENABLED(CONFIG_BOARD_NRF9160DK))
+	if (IS_ENABLED(CONFIG_BOARD_NRF7002DK))
 	{
 		if (sizeof(ca_certificate) > 1)
 		{
-			err = modem_key_mgmt_write(955,
-									   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
-									   ca_certificate,
-									   sizeof(ca_certificate) - 1);
-			if (err)
-			{
-				return err;
-			}
+			err = tls_credential_add(APP_CA_CERT_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
+									 ca_certificate, sizeof(ca_certificate));
 		}
 	}
 	else
 	{
-		err = tls_credential_add(APP_CA_CERT_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
-								 ca_certificate, sizeof(ca_certificate));
-		if (err < 0)
-		{
-			LOG_ERR("Failed to register public certificate: %d", err);
-			return err;
-		}
+		err = modem_key_mgmt_write(955,
+								   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
+								   ca_certificate,
+								   sizeof(ca_certificate) - 1);
+	}
+
+	if (err < 0)
+	{
+		LOG_ERR("Failed to register public certificate: %d", err);
+		return err;
 	}
 
 	k_work_init_delayable(&pub_message, publish_timeout);
